@@ -48,7 +48,6 @@ public class QuizHandler {
 
         Quiz quiz = repository.findById(id).orElseThrow(
                 () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "entity not found"));
-
         if (quiz.validateAnswer(answer.getAnswer())) {
             completionRep.save(userPrincipal.getUser().
                     addCompleted(new Completed(quiz.getId(), LocalDateTime.now())));
@@ -77,5 +76,18 @@ public class QuizHandler {
     @GetMapping("/api/quizzes/completed")
     public Page<Completed> getCompleted(@RequestParam(required = false, defaultValue = "0") int page, @AuthenticationPrincipal MyUserPrincipal user) {
         return completionRep.findAllByUser_id(user.getUser().getId(), PageRequest.of(page, 10));
+    }
+
+    @PutMapping("api/quizzes/{id}")
+    public Quiz updateQuiz(@PathVariable long id, @AuthenticationPrincipal MyUserPrincipal user, @RequestBody Quiz quiz) {
+        if (id != user.getUser().getId()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+        Quiz quizToUpdate = repository.getOne(id);
+        quizToUpdate.setAnswer(quiz.getAnswer());
+        quizToUpdate.setOptions(quiz.getOptions());
+        quizToUpdate.setText(quiz.getText());
+        quizToUpdate.setTitle(quiz.getTitle());
+        return repository.save(quizToUpdate);
     }
 }

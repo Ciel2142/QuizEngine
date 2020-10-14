@@ -10,4 +10,6 @@ public interface CompletionRep extends JpaRepository<Completed, Long> {
 
     @Query(value = "SELECT u FROM Completed u WHERE u.user_id = ?1")
     Page<Completed> findAllByUser_id(long owner, Pageable pageable);
+
+
 }
