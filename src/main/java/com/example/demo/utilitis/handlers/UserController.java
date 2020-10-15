@@ -10,20 +10,20 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.sql.DataSource;
 import javax.validation.Valid;
-import java.sql.SQLException;
 
 @RestController
 public class UserController {
-    @Autowired
-    private UserRepository userRepository;
+
+    private final UserRepository userRepository;
+
+    private final BCryptPasswordEncoder bCryptPasswordEncoder;
 
     @Autowired
-    BCryptPasswordEncoder bCryptPasswordEncoder;
-
-    @Autowired
-    DataSource ds;
+    public UserController(UserRepository userRepository, BCryptPasswordEncoder bCryptPasswordEncoder) {
+        this.userRepository = userRepository;
+        this.bCryptPasswordEncoder = bCryptPasswordEncoder;
+    }
 
     @ResponseStatus(code = HttpStatus.BAD_REQUEST, reason = "User is already registered!")
     static class UsernameIsTakenException extends RuntimeException {
@@ -31,9 +31,9 @@ public class UserController {
 
     @PostMapping(value = "/api/register", consumes = "application/json")
     public String registerUser(@Valid @RequestBody User newUser) {
-        if (userRepository.findByEmail(newUser.getEmail()).isPresent()) throw new UsernameIsTakenException();
+        if (userRepository.findByEmail(newUser.getEmail()).isPresent())
+            throw new UsernameIsTakenException();
         newUser.setPassword(bCryptPasswordEncoder.encode(newUser.getPassword()));
-        userRepository.save(newUser);
-        return String.format("Email %s registration successful", newUser.getEmail());
+        return String.format("Email %s registration successful", userRepository.save(newUser).getEmail());
     }
 }
