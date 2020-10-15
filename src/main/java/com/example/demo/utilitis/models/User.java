@@ -27,7 +27,7 @@ public class User {
     private String password;
 
     @OneToMany(
-            fetch = FetchType.LAZY,
+            fetch = FetchType.EAGER,
             mappedBy = "user",
             cascade = {
                     CascadeType.PERSIST,
@@ -37,7 +37,9 @@ public class User {
             })
     private List<Quiz> quizzes = new ArrayList<>();
 
-    @OneToMany(cascade = CascadeType.ALL)
+    @OneToMany(
+            cascade = CascadeType.ALL,
+            fetch = FetchType.EAGER)
     @JoinColumn(name = "user_id")
     private List<Completed> completedList;
 

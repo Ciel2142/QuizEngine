@@ -1,8 +1,10 @@
 package com.example.demo.utilitis.handlers;
 
-import com.example.demo.utilitis.models.*;
-import com.example.demo.utilitis.repositories.CompletionRep;
-import com.example.demo.utilitis.repositories.QuizRepository;
+import com.example.demo.utilitis.handlers.services.QuizService;
+import com.example.demo.utilitis.models.AnswerToQuiz;
+import com.example.demo.utilitis.models.Completed;
+import com.example.demo.utilitis.models.Feedback;
+import com.example.demo.utilitis.models.Quiz;
 import com.example.demo.utilitis.users.MyUserPrincipal;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -10,8 +12,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import javax.validation.Valid;
 import java.time.LocalDateTime;
@@ -19,75 +21,66 @@ import java.time.LocalDateTime;
 @RestController
 public class QuizHandler {
 
-    @Autowired
-    private QuizRepository repository;
-    @Autowired
-    private CompletionRep completionRep;
+    private final QuizService quizService;
+    private Feedback feedback;
 
+    @Autowired
+    public QuizHandler(QuizService quizService) {
+        this.quizService = quizService;
+    }
+
+    @Autowired
+    public void setFeedback(Feedback feedback) {
+        this.feedback = feedback;
+    }
+
+    @Transactional
     @PostMapping(path = "/api/quizzes")
     public Quiz addQuiz(@Valid @RequestBody Quiz newQuiz,
                         @AuthenticationPrincipal MyUserPrincipal user) {
-        return repository.save(user.getUser().addQuiz(newQuiz));
+        return quizService.save(user.getUser(), newQuiz);
     }
 
     @DeleteMapping(path = "/api/quizzes/{id}")
     public ResponseEntity<?> deleteQuiz(@PathVariable long id,
                                         @AuthenticationPrincipal MyUserPrincipal user) {
-        Quiz quiz = repository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (quiz.getUser() != user.getUser()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        }
-        repository.deleteById(id);
+        quizService.deleteById(id, user.getUser());
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 
     @PostMapping(path = "/api/quizzes/{id}/solve")
-    public ResponseEntity<?> postAnswer(@RequestBody AnswerToQuiz answer,
-                                        @PathVariable long id,
-                                        @AuthenticationPrincipal MyUserPrincipal userPrincipal) {
+    @Transactional
+    public Feedback postAnswer(@RequestBody AnswerToQuiz answer,
+                               @PathVariable long id,
+                               @AuthenticationPrincipal MyUserPrincipal userPrincipal) {
 
-        Quiz quiz = repository.findById(id).orElseThrow(
-                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "entity not found"));
+        Quiz quiz = quizService.findById(id);
         if (quiz.validateAnswer(answer.getAnswer())) {
-            completionRep.save(userPrincipal.getUser().
+            feedback.setFeedback("Congratulations, you're right!");
+            feedback.setSuccess(true);
+            quizService.saveCompleted(userPrincipal.getUser().
                     addCompleted(new Completed(quiz.getId(), LocalDateTime.now())));
-            return new ResponseEntity<>(new Feedback(true, "Congratulations, you're right!"),
-                    HttpStatus.OK);
-        } else {
-            return new ResponseEntity<>(new Feedback(false, "Wrong answer! Please, try again."),
-                    HttpStatus.OK);
         }
+        return feedback;
     }
 
     @GetMapping("/api/quizzes/{id}")
-    public ResponseEntity<?> getQuiz(@PathVariable long id) {
-        Quiz quiz = repository.findById(id).orElseThrow(() -> new ResponseStatusException(
-                HttpStatus.NOT_FOUND, "entity not found"
-        ));
-
-        return new ResponseEntity<>(quiz, HttpStatus.OK);
+    public Quiz getQuiz(@PathVariable long id) {
+        return quizService.findById(id);
     }
 
     @GetMapping("/api/quizzes")
-    public Page<Quiz> getQuizList(@RequestParam int page) {
-        return repository.findAll(PageRequest.of(page, 10));
+    public Page<Quiz> getQuizList(@RequestParam(required = false, defaultValue = "0") int page) {
+        return quizService.findAll(PageRequest.of(page, 10));
     }
 
     @GetMapping("/api/quizzes/completed")
     public Page<Completed> getCompleted(@RequestParam(required = false, defaultValue = "0") int page, @AuthenticationPrincipal MyUserPrincipal user) {
-        return completionRep.findAllByUser_id(user.getUser().getId(), PageRequest.of(page, 10));
+        return quizService.findAllByUser_id(user.getUser().getId(), PageRequest.of(page, 10));
     }
 
     @PutMapping("api/quizzes/{id}")
     public Quiz updateQuiz(@PathVariable long id, @AuthenticationPrincipal MyUserPrincipal user, @RequestBody Quiz quiz) {
-        Quiz quizToUpdate = repository.getOne(id);
-        if (quizToUpdate.getUser().getId() != user.getUser().getId()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        }
-        quizToUpdate.setAnswer(quiz.getAnswer());
-        quizToUpdate.setOptions(quiz.getOptions());
-        quizToUpdate.setText(quiz.getText());
-        quizToUpdate.setTitle(quiz.getTitle());
-        return repository.save(quizToUpdate);
+        return quizService.updateQuiz(id, quiz, user.getUser());
     }
 }
